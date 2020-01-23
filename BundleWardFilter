@@ -1,0 +1,205 @@
+Blundell/Ward filter
+
+[일반적으로]
+In a general context, "autocorrelation" (also called "serial correlation") is the correlation 
+between observations of a time series with lagged observations of the same series.
+
+[성과분석측면에서 자기상관관계]
+In a performance context, positive autocorrelation of period returns can result in a positive 
+(negative) relatiev return in one period followed by another positive (negative) relative 
+return the next period.
+Negative autocorrelation can result in a positive (negative) relative returns followed by 
+negative (positive) relative returns.
+On the other hand, a sign change (or an absence of) from observation to observation is not 
+a requirement for the presence of autocorrelation.
+
+[어디에서 관측되는 가?]
+Positive autocorrelation has also been observed in real estate, respectively subprime and ABS 
+and CDO containing subprime mortgage exposures and hedge fund return time series.
+
+[자기상관이 존재하는 이유]
+One reason for the existence of autocorrelation is illiquidity, which results in observed prices 
+not being market prices reflecting all relevant information. (관측된 가격이 시장가격이 아니기 때문이다)
+The problem with positive autocorrelation is that it will have a lower volatility 
+than the uncorrelated series. ( +자기상관계수는 비상관 시계열 데이터에 비해 낮은 변동성을 가진다 )
+As less volatility is usually preferred to more, the attractiveness of returns is therefore 
+distorted (overestimated) in the presence of positive autocorrelation.
+
+[자기 상관관계가 존재하는 지 알 수 있는 방법]
+Several approaches to dealing with autocorrelation exist. A popular one is 
+the Blundell/Ward filter, which uses the filter below..
+
+r*(t) = 1/(1-a1) * r(t) - a1/(1-a1) * r(t-1)
+r*(t)... the "decorrelated" return time series
+r(t)... the original return time series
+r(t-1)... the lagged (by one period9 return time series
+a1... a coefficient from the regression below...
+
+r(t) = a0 + a1*r(t-1) + e(t)
+a0... a constant
+e(t)... the usual regression error term
+
+[B/W필터의 장점]
+This filter has the advantage that the mean return remains more or less unchanged. 
+So calculating risk-adjusted performance will result in much less biased results.
+
+[용도]
+이것은 자기상관관계가 지워진 시계열 데이터를 만들어 분석을 용이하게 만들 기 위한 것이다. 
+위의 식 r*(t)는 원래의 시계열 r(t)에서 자기상관이 지워진 시계열이다. 
+
+[구현]
+다음은 B/W필터 프로그래밍 예이다. 여기에서 lag은 1로 정했다.
+#include <iostream>
+#include <stdlib.h>
+#include <cmath>
+
+using namespace std;
+
+double get_mean(int nobs, double* x);
+double get_sxy (int nobs, double* x, double* y);
+
+void compute_simple_regression(// input
+   int nobs,
+   double* y,     // nobs * 1 array
+   double* x,     // nobs * 1 array
+
+   // output
+   double* a,     // constant
+   double* b      // coef of x
+   );
+   
+double blundell_ward_filter(int nobs, double* y, double* filtered);
+double sum(int nobs, double* obs_return);
+double average(int nobs, double* obs_return);
+double variance(int nobs, double* obs_return);
+double stdev(int nobs, double* obs_return);
+
+int main(int argc, char *argv[])
+{
+    int i;
+    int nobs = 119;
+    double *y;
+    double *filtered;
+
+    y = new double[nobs];
+    filtered=new double[nobs];
+    
+    // 데이터 읽어오기
+    y[0] = 7.789176521;
+    y[1] = 5.794418421;
+    ............................
+    ............................
+    ............................
+    y[117] = 0.849329426;
+    y[118] = -0.151664257;
+    
+    blundell_ward_filter(nobs,y,filtered);
+    for(i=0; i<nobs; ++i)
+        cout << i <<".  " << y[i] <<"\t" << filtered[i] << endl;
+  
+    cout<<endl;      
+    cout<<"             "<<"Original"<<"\t"<<"Filtered"<<endl;
+    cout<<"Average    : "<<average(nobs,y)<<"\t"<<average(nobs,filtered)<<endl;
+    cout<<"Volatility : "<<stdev(nobs,y)<<"\t"<<stdev(nobs,filtered)<<endl; 
+      
+    delete[] y;
+    delete[] filtered;
+       
+    system("PAUSE");	
+    return 0;
+}
+
+double blundell_ward_filter(int nobs, double* y, double* filtered)
+{
+    double *y_local,*x_local;
+    double a, b;     
+    
+    y_local = new double[nobs-1];
+    x_local = new double[nobs-1];
+    
+    for(int i=0;i<(nobs-1);i++)
+    {
+        y_local[i]=y[i+1];
+        x_local[i]=y[i];
+    }    
+    compute_simple_regression(nobs-1, y_local, x_local, &a, &b);
+
+    filtered[0]=(y[0]*(1-b))/(1-b);
+    for(int i=1;i<nobs;i++)
+        filtered[i]=(y[i]-y[i-1]*b)/(1-b);
+        
+    delete[] y_local;
+    delete[] x_local;
+    
+    return b;
+}
+
+double get_mean(int nobs, double* x)
+{
+    double sum=0.0;
+    for(int i=0; i<nobs; ++i) sum += x[i];
+    return(sum/nobs);
+}
+
+double get_sxy (int nobs, double* x, double* y)
+{
+    double meanx, meany, sigma_square = 0.0;
+
+    meanx = get_mean(nobs, x);
+    meany = get_mean(nobs, y);
+
+    for(int i=0; i<nobs; ++i) 
+        sigma_square += (x[i]-meanx)*(y[i]-meany);
+
+    return (sigma_square/(nobs-1));
+}
+
+void compute_simple_regression(// input
+     int nobs,
+     double* y,     // nobs * 1 array
+     double* x,     // nobs * 1 array
+
+     // output
+     double* a,     // constant
+     double* b     // coef of x
+     )
+{
+    double xbar, ybar, sxx, sxy;
+
+    xbar = get_mean(nobs, x);
+    ybar = get_mean(nobs, y); 
+
+    sxx = get_sxy(nobs, x, x);
+    sxy = get_sxy(nobs, x, y);
+
+    *b = sxy/sxx;
+    *a = ybar - (*b)*xbar;
+}
+
+double sum(int nobs,double* obs_return)
+{
+  double sum_return=0.0;
+  for(int i=0;i<nobs;i++)
+    sum_return+=obs_return[i];
+  return sum_return;
+}
+
+double average(int nobs,double* obs_return)
+{
+  return sum(nobs,obs_return)/nobs;
+}
+
+double variance(int nobs,double* obs_return)
+{
+  double avg=average(nobs,obs_return);
+  double sum=0.0;
+  
+  for(int i=0;i<nobs;i++)
+    sum+=(obs_return[i]-avg)*(obs_return[i]-avg);
+  return sum/nobs;
+}
+
+double stdev(int nobs,double* obs_return)
+{
+  return sqrt(variance(nobs,obs_return));
+}
